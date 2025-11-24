@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Sun, User, Ruler, TrendingUp, Camera, Shirt, ArrowRight, Star, LogOut, Settings, Bell, Check, Calculator, Info, Sparkles, Download, Share2, RefreshCw, Package, Plus, X, Heart, Save, Loader2 } from 'lucide-react';
+import { useState, useMemo } from "react";
+import { Sun, User, Ruler, TrendingUp, Camera, Shirt, ArrowRight, Star, LogOut, Bell, Check, Calculator, Info, Sparkles, Download, Share2, RefreshCw, Package, Plus, Heart, Save, Loader2 } from 'lucide-react';
 
 // --- DADOS FIXOS ---
 const colorPalettes: Record<string, { label: string; hex: string; season: string; description: string; colors: string[]; styles: string[] }> = {
