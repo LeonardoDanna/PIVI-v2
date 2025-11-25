@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { Sun, User, Ruler, TrendingUp, Camera, Shirt, ArrowRight, Star, LogOut, Bell, Check, Calculator, Info, Sparkles, Download, Share2, RefreshCw, Package, Plus, Heart, Save, Loader2, Upload, Layers } from 'lucide-react';
 
 // --- CONFIGURAÇÃO DA API ---
@@ -6,8 +6,44 @@ const API_KEY = "fcca3320dfmsh03d10c1b184eb0fp19e3d8jsn2411cc31418c";
 const API_HOST = "try-on-diffusion.p.rapidapi.com";
 const API_URL = "https://try-on-diffusion.p.rapidapi.com/try-on-file"; 
 
+// --- INTERFACES E TIPOS (Novo: Para o TypeScript entender os dados) ---
+
+interface Palette {
+  label: string;
+  hex: string;
+  season: string;
+  description: string;
+  colors: string[];
+  styles: string[];
+}
+
+type SkinToneKey = 'very_light' | 'light' | 'medium' | 'tan' | 'dark' | 'deep';
+
+interface TryOnState {
+  userImage: string | null;
+  userFile: File | null;
+  clothImage: string | null;
+  clothFile: File | null;
+  category: string;
+  isGenerating: boolean;
+  resultImage: string | null;
+  error: string | null;
+}
+
+interface FitMetrics {
+  height: number;
+  weight: number;
+  preference: 'tight' | 'regular' | 'loose';
+}
+
+interface ClosetItem {
+  id: string;
+  name: string;
+  image: string;
+}
+
 // --- DADOS FIXOS ---
-const colorPalettes = {
+const colorPalettes: Record<SkinToneKey, Palette> = {
   very_light: { label: 'Muito Clara', hex: '#FAE7D0', season: 'Inverno Frio', description: 'Pele com subtom frio. Cores puras, gélidas e contrastantes realçam sua beleza natural.', colors: ['bg-blue-500', 'bg-pink-600', 'bg-emerald-500', 'bg-purple-700', 'bg-gray-900', 'bg-slate-200'], styles: ['Minimalista', 'Dramático', 'Alfaiataria', 'Gótico Suave', 'Moderno', 'Futurista'] },
   light: { label: 'Clara', hex: '#E3C1A0', season: 'Verão Suave', description: 'Contraste delicado. Tons pastéis, lavanda e azul bebê harmonizam perfeitamente.', colors: ['bg-sky-200', 'bg-rose-300', 'bg-indigo-300', 'bg-teal-200', 'bg-purple-300', 'bg-slate-400'], styles: ['Romântico', 'Lady Like', 'Provençal', 'Clássico', 'Vintage', 'Cottagecore'] },
   medium: { label: 'Média', hex: '#CFA880', season: 'Primavera Quente', description: 'Pele dourada e vibrante. Cores alegres como coral, turquesa e dourado são ideais.', colors: ['bg-orange-400', 'bg-lime-500', 'bg-yellow-400', 'bg-cyan-500', 'bg-red-500', 'bg-amber-300'], styles: ['Criativo', 'Tropical', 'Esportivo', 'Color Block', 'Casual Chic', 'Preppy'] },
@@ -25,7 +61,7 @@ const tabs = [
   { id: 'tryon', label: 'Provador Virtual', icon: <Sparkles size={20} />, subtitle: 'IA Generativa' },
 ];
 
-const initialClosetData = {
+const initialClosetData: Record<string, ClosetItem[]> = {
   head: [
     { id: 'h1', name: 'Boné NY Preto', image: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?q=80&w=300&auto=format&fit=crop' },
     { id: 'h2', name: 'Beanie Cinza', image: 'https://images.unsplash.com/photo-1576871337632-b9aef4c17ab9?q=80&w=300&auto=format&fit=crop' },
@@ -52,23 +88,74 @@ const initialClosetData = {
   ]
 };
 
+// Mapeamento de imagens para cada estilo (Adicione isso junto com seus dados fixos)
+const styleImagesData = {
+  // Inverno Frio
+  'Minimalista': 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?q=80&w=600&auto=format&fit=crop',
+  'Dramático': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop',
+  'Alfaiataria': 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?q=80&w=600&auto=format&fit=crop',
+  'Gótico Suave': 'https://images.unsplash.com/photo-1536243297275-48b4d1b82405?q=80&w=600&auto=format&fit=crop',
+  'Moderno': 'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=600&auto=format&fit=crop',
+  'Futurista': 'https://images.unsplash.com/photo-1529139574466-a302c2d3e739?q=80&w=600&auto=format&fit=crop',
+  
+  // Verão Suave
+  'Romântico': 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=600&auto=format&fit=crop',
+  'Lady Like': 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?q=80&w=600&auto=format&fit=crop',
+  'Provençal': 'https://images.unsplash.com/photo-1516762689617-e1cffcef479d?q=80&w=600&auto=format&fit=crop',
+  'Clássico': 'https://images.unsplash.com/photo-1548142813-c348350df52b?q=80&w=600&auto=format&fit=crop',
+  'Vintage': 'https://images.unsplash.com/photo-1550614000-4b9519e02a15?q=80&w=600&auto=format&fit=crop',
+  'Cottagecore': 'https://images.unsplash.com/photo-1502163140606-888448ae8cfe?q=80&w=600&auto=format&fit=crop',
+
+  // Primavera Quente
+  'Criativo': 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?q=80&w=600&auto=format&fit=crop',
+  'Tropical': 'https://images.unsplash.com/photo-1527016021513-b09758b777d5?q=80&w=600&auto=format&fit=crop',
+  'Esportivo': 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=600&auto=format&fit=crop',
+  'Color Block': 'https://images.unsplash.com/photo-1509631179647-b84917147c2a?q=80&w=600&auto=format&fit=crop',
+  'Casual Chic': 'https://images.unsplash.com/photo-1589465885857-44edb59ef526?q=80&w=600&auto=format&fit=crop',
+  'Preppy': 'https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?q=80&w=600&auto=format&fit=crop',
+
+  // Outono Profundo / Escuro
+  'Boho Chic': 'https://images.unsplash.com/photo-1519725946194-c7da41215570?q=80&w=600&auto=format&fit=crop',
+  'Natural': 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?q=80&w=600&auto=format&fit=crop',
+  'Folk': 'https://images.unsplash.com/photo-1520006403909-838d6b92c22e?q=80&w=600&auto=format&fit=crop',
+  'Safari': 'https://images.unsplash.com/photo-1545291730-faff8ca1d4b0?q=80&w=600&auto=format&fit=crop',
+  'Militar': 'https://images.unsplash.com/photo-1588117260148-447885143a6d?q=80&w=600&auto=format&fit=crop',
+  'Rústico': 'https://images.unsplash.com/photo-1485230946086-1d99d529a730?q=80&w=600&auto=format&fit=crop',
+  'Sofisticado': 'https://images.unsplash.com/photo-1487222477894-8943e31ef7b2?q=80&w=600&auto=format&fit=crop',
+  'Glamour': 'https://images.unsplash.com/photo-1566737236500-c8ac43014a67?q=80&w=600&auto=format&fit=crop',
+  'Urbano': 'https://images.unsplash.com/photo-1550928431-ee0ec6db30d3?q=80&w=600&auto=format&fit=crop',
+  'Executivo': 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=600&auto=format&fit=crop',
+  'Retrô': 'https://images.unsplash.com/photo-1550614000-4b9519e02a15?q=80&w=600&auto=format&fit=crop',
+  'Barroco': 'https://images.unsplash.com/photo-1550928431-ee0ec6db30d3?q=80&w=600&auto=format&fit=crop',
+
+  // Inverno Brilhante
+  'Streetwear': 'https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?q=80&w=600&auto=format&fit=crop',
+  'High Fashion': 'https://images.unsplash.com/photo-1500917293891-ef795e70e1f6?q=80&w=600&auto=format&fit=crop',
+  'Vibrante': 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?q=80&w=600&auto=format&fit=crop',
+  'Geométrico': 'https://images.unsplash.com/photo-1462002596489-4d6cb6007421?q=80&w=600&auto=format&fit=crop', // LINK NOVO AQUI
+  'Esportivo Deluxe': 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=600&auto=format&fit=crop',
+  'Pop Art': 'https://images.unsplash.com/photo-1616892790299-44520b2996a1?q=80&w=600&auto=format&fit=crop',
+};
+
 const PersonalStylistApp = () => {
   const [activeTab, setActiveTab] = useState('tryon'); 
-  const [selectedSkinTone, setSelectedSkinTone] = useState('medium');
+  const [selectedSkinTone, setSelectedSkinTone] = useState<SkinToneKey>('medium');
 
   // ESTADOS DA CALCULADORA
-  const [fitMetrics, setFitMetrics] = useState({ height: 175, weight: 75, preference: 'regular' });
+  const [fitMetrics, setFitMetrics] = useState<FitMetrics>({ height: 175, weight: 75, preference: 'regular' });
   
   // --- ESTADOS E REFS PARA O PROVADOR REAL ---
-  const userFileInputRef = useRef(null);
-  const clothFileInputRef = useRef(null);
+  // Fix: Tipando o useRef como elemento HTML
+  const userFileInputRef = useRef<HTMLInputElement>(null);
+  const clothFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [tryOnState, setTryOnState] = useState({
+  // Fix: Adicionando Interface Generics para permitir null e string
+  const [tryOnState, setTryOnState] = useState<TryOnState>({
     userImage: null, 
     userFile: null,  
     clothImage: null, 
     clothFile: null,
-    category: 'upper_body', // NOVO: Padrão para parte de cima (evita erro de vestido)
+    category: 'upper_body',
     isGenerating: false,
     resultImage: null,
     error: null
@@ -100,15 +187,17 @@ const PersonalStylistApp = () => {
 
   const currentPalette = colorPalettes[selectedSkinTone];
 
-  const loadPreset = (type) => {
+  // Fix: Tipagem explícita do parâmetro type
+  const loadPreset = (type: 'small' | 'medium' | 'large') => {
     if (type === 'small') setFitMetrics({ ...fitMetrics, height: 165, weight: 58 });
     if (type === 'medium') setFitMetrics({ ...fitMetrics, height: 178, weight: 76 });
     if (type === 'large') setFitMetrics({ ...fitMetrics, height: 185, weight: 105 });
   };
 
   // --- FUNÇÕES REAIS DE UPLOAD ---
-  const handleFileUpload = (event, type) => {
-    const file = event.target.files[0];
+  // Fix: Tipagem do evento de change do input
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, type: 'user' | 'cloth') => {
+    const file = event.target.files?.[0]; // Optional chaining
     if (file) {
       const previewUrl = URL.createObjectURL(file);
       if (type === 'user') {
@@ -119,8 +208,9 @@ const PersonalStylistApp = () => {
     }
   };
 
-  const triggerUserUpload = () => userFileInputRef.current.click();
-  const triggerClothUpload = () => clothFileInputRef.current.click();
+  // Fix: Optional chaining para refs
+  const triggerUserUpload = () => userFileInputRef.current?.click();
+  const triggerClothUpload = () => clothFileInputRef.current?.click();
 
   // --- FUNÇÃO DE GERAÇÃO COM A API ---
   const handleGenerate = async () => {
@@ -131,11 +221,10 @@ const PersonalStylistApp = () => {
     const formData = new FormData();
     formData.append('clothing_image', tryOnState.clothFile);
     formData.append('avatar_image', tryOnState.userFile);
-    // ENVIA A CATEGORIA PARA A API (Melhoria Essencial)
     formData.append('category', tryOnState.category);
-    formData.append('seed', -1);
-    formData.append('width', 1024);
-    formData.append('height', 1024);
+    formData.append('seed', '-1');
+    formData.append('width', '1024');
+    formData.append('height', '1024');
 
     try {
         const response = await fetch(API_URL, {
@@ -332,7 +421,7 @@ const PersonalStylistApp = () => {
                                         onClick={() => setClosetSelection(prev => ({...prev, head: item.id}))}
                                         className={`w-24 h-24 rounded-2xl flex-shrink-0 cursor-pointer overflow-hidden border-2 transition-all relative snap-center ${closetSelection.head === item.id ? 'border-purple-600 ring-2 ring-purple-100 scale-105' : 'border-transparent'}`}
                                     >
-                                        <img src={item.image} className="w-full h-full object-cover"/>
+                                        <img src={item.image} className="w-full h-full object-cover" alt={item.name}/>
                                         {closetSelection.head === item.id && <div className="absolute top-1 right-1 bg-purple-600 w-4 h-4 rounded-full flex items-center justify-center"><Check size={10} className="text-white"/></div>}
                                     </div>
                                 ))}
@@ -352,7 +441,7 @@ const PersonalStylistApp = () => {
                                         onClick={() => setClosetSelection(prev => ({...prev, top: item.id}))}
                                         className={`w-32 h-32 rounded-2xl flex-shrink-0 cursor-pointer overflow-hidden border-2 transition-all relative snap-center ${closetSelection.top === item.id ? 'border-purple-600 ring-2 ring-purple-100 scale-105' : 'border-transparent'}`}
                                     >
-                                        <img src={item.image} className="w-full h-full object-cover"/>
+                                        <img src={item.image} className="w-full h-full object-cover" alt={item.name}/>
                                         {closetSelection.top === item.id && <div className="absolute top-1 right-1 bg-purple-600 w-4 h-4 rounded-full flex items-center justify-center"><Check size={10} className="text-white"/></div>}
                                     </div>
                                 ))}
@@ -372,7 +461,7 @@ const PersonalStylistApp = () => {
                                         onClick={() => setClosetSelection(prev => ({...prev, bottom: item.id}))}
                                         className={`w-32 h-40 rounded-2xl flex-shrink-0 cursor-pointer overflow-hidden border-2 transition-all relative snap-center ${closetSelection.bottom === item.id ? 'border-purple-600 ring-2 ring-purple-100 scale-105' : 'border-transparent'}`}
                                     >
-                                        <img src={item.image} className="w-full h-full object-cover"/>
+                                        <img src={item.image} className="w-full h-full object-cover" alt={item.name}/>
                                         {closetSelection.bottom === item.id && <div className="absolute top-1 right-1 bg-purple-600 w-4 h-4 rounded-full flex items-center justify-center"><Check size={10} className="text-white"/></div>}
                                     </div>
                                 ))}
@@ -392,7 +481,7 @@ const PersonalStylistApp = () => {
                                         onClick={() => setClosetSelection(prev => ({...prev, feet: item.id}))}
                                         className={`w-24 h-24 rounded-2xl flex-shrink-0 cursor-pointer overflow-hidden border-2 transition-all relative snap-center ${closetSelection.feet === item.id ? 'border-purple-600 ring-2 ring-purple-100 scale-105' : 'border-transparent'}`}
                                     >
-                                        <img src={item.image} className="w-full h-full object-cover"/>
+                                        <img src={item.image} className="w-full h-full object-cover" alt={item.name}/>
                                         {closetSelection.feet === item.id && <div className="absolute top-1 right-1 bg-purple-600 w-4 h-4 rounded-full flex items-center justify-center"><Check size={10} className="text-white"/></div>}
                                     </div>
                                 ))}
@@ -413,20 +502,20 @@ const PersonalStylistApp = () => {
                             <div className="flex-1 flex flex-col gap-2 items-center justify-center bg-white/5 rounded-2xl p-4 border border-white/10">
                                 {/* Head */}
                                 <div className="w-20 h-20 rounded-xl overflow-hidden shadow-lg border-2 border-white/20">
-                                    <img src={initialClosetData.head.find(i => i.id === closetSelection.head)?.image} className="w-full h-full object-cover"/>
+                                    <img src={initialClosetData.head.find(i => i.id === closetSelection.head)?.image} className="w-full h-full object-cover" alt="head"/>
                                 </div>
                                 {/* Top */}
                                 <div className="w-32 h-32 rounded-xl overflow-hidden shadow-lg border-2 border-white/20 z-10 -mt-2">
-                                    <img src={initialClosetData.top.find(i => i.id === closetSelection.top)?.image} className="w-full h-full object-cover"/>
+                                    <img src={initialClosetData.top.find(i => i.id === closetSelection.top)?.image} className="w-full h-full object-cover" alt="top"/>
                                 </div>
                                 {/* Bottom */}
                                 <div className="w-32 h-40 rounded-xl overflow-hidden shadow-lg border-2 border-white/20 z-20 -mt-4">
-                                    <img src={initialClosetData.bottom.find(i => i.id === closetSelection.bottom)?.image} className="w-full h-full object-cover"/>
+                                    <img src={initialClosetData.bottom.find(i => i.id === closetSelection.bottom)?.image} className="w-full h-full object-cover" alt="bottom"/>
                                 </div>
                                 {/* Feet */}
                                 <div className="w-32 h-20 flex justify-center gap-1 z-30 -mt-6">
                                      <div className="w-24 h-20 rounded-xl overflow-hidden shadow-lg border-2 border-white/20">
-                                        <img src={initialClosetData.feet.find(i => i.id === closetSelection.feet)?.image} className="w-full h-full object-cover"/>
+                                        <img src={initialClosetData.feet.find(i => i.id === closetSelection.feet)?.image} className="w-full h-full object-cover" alt="feet"/>
                                      </div>
                                 </div>
                             </div>
@@ -460,60 +549,125 @@ const PersonalStylistApp = () => {
                 </div>
             )}
 
-            {/* ABA MATCHES */}
+             {/* ABA MATCHES (CORRIGIDA) */}
             {activeTab === 'matches' && (
-                <div className="animate-fade-in grid grid-cols-12 gap-8 h-[calc(100vh-140px)]">
-                    <div className="col-span-4 bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col">
-                    <div className="mb-8">
-                        <h3 className="font-bold text-sm text-slate-400 uppercase tracking-wider mb-4">Selecione seu tom de pele</h3>
-                        <div className="flex flex-wrap gap-3">
-                        {Object.keys(colorPalettes).map((key) => (
-                            <button
-                            key={key}
-                            onClick={() => setSelectedSkinTone(key)}
-                            className={`w-12 h-12 rounded-full border-4 transition-all duration-300 relative shadow-sm ${
-                                selectedSkinTone === key ? 'border-slate-900 scale-110 z-10' : 'border-white hover:scale-105 hover:border-slate-200'
-                            }`}
-                            style={{ backgroundColor: colorPalettes[key].hex }}
-                            title={colorPalettes[key].label}
-                            >
-                            {selectedSkinTone === key && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                <Check size={18} strokeWidth={3} className={['dark', 'deep', 'tan'].includes(key) ? 'text-white' : 'text-slate-900'} />
-                                </div>
-                            )}
-                            </button>
-                        ))}
+                <div className="animate-fade-in flex flex-col lg:flex-row gap-8 min-h-[calc(100vh-140px)]">
+                    
+                    {/* COLUNA DA ESQUERDA: ANÁLISE DE COR */}
+                    <div className="w-full lg:w-1/3 space-y-8">
+                        
+                        {/* Seletor de Pele */}
+                        <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50">
+                            <h3 className="font-bold text-slate-800 text-lg mb-6 flex items-center gap-2">
+                                <User className="text-purple-600" size={20}/>
+                                Seu Tom de Pele
+                            </h3>
+                            
+                            <div className="flex flex-wrap gap-4 justify-center">
+                            {/* AQUI ESTÁ A CORREÇÃO: (Object.keys(...) as SkinToneKey[]) */}
+                            {(Object.keys(colorPalettes) as SkinToneKey[]).map((key) => (
+                                <button
+                                    key={key}
+                                    onClick={() => setSelectedSkinTone(key)}
+                                    className={`group relative w-16 h-16 rounded-full transition-all duration-300 flex items-center justify-center ${
+                                        selectedSkinTone === key
+                                        ? 'ring-4 ring-offset-4 ring-slate-900 scale-110 shadow-lg'
+                                        : 'hover:scale-105 hover:shadow-md ring-1 ring-slate-100'
+                                    }`}
+                                    style={{ backgroundColor: colorPalettes[key].hex }}
+                                    title={colorPalettes[key].label}
+                                >
+                                    {selectedSkinTone === key && (
+                                        <div className="bg-white/20 backdrop-blur-sm rounded-full p-2">
+                                            <Check size={20} strokeWidth={3} className={['dark', 'deep', 'tan'].includes(key) ? 'text-white' : 'text-slate-900'} />
+                                        </div>
+                                    )}
+                                </button>
+                            ))}
                         </div>
-                        <p className="text-xs text-slate-400 mt-2 italic">Tom selecionado: {colorPalettes[selectedSkinTone].label}</p>
-                    </div>
-                    <div className="h-px bg-slate-100 w-full mb-8"></div>
-                    <div>
-                        <h3 className="font-bold text-xl text-slate-800 mb-1">Sua Cartela Sugerida</h3>
-                        <p className="text-2xl font-black text-purple-600 mb-2">{currentPalette.season}</p>
-                        <p className="text-slate-500 text-sm leading-relaxed">{currentPalette.description}</p>
-                    </div>
-                    <div className="mt-8 grid grid-cols-2 gap-3">
-                        {currentPalette.colors.map((color, i) => (
-                        <div key={i} className={`h-16 rounded-xl ${color === 'bg-white' ? 'border border-slate-200 bg-white' : color} shadow-sm flex items-center justify-center text-white/20 text-xs font-bold group hover:scale-105 transition`}>
-                            <span className="opacity-0 group-hover:opacity-100 mix-blend-difference">COR {i+1}</span>
-                        </div>
-                        ))}
-                    </div>
-                    </div>
-                    <div className="col-span-8 space-y-6">
-                    <h3 className="font-bold text-xl text-slate-800">Estilos que combinam com {currentPalette.season}</h3>
-                    <div className="grid grid-cols-3 gap-6">
-                        {currentPalette.styles.map((style) => (
-                        <div key={style} className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-slate-900 transition cursor-pointer flex flex-col items-center justify-center gap-4 h-40 group">
-                            <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition">
-                                <Shirt size={20}/>
+                            <div className="mt-8 text-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Diagnóstico</p>
+                                <p className="text-slate-800 font-medium">Pele {colorPalettes[selectedSkinTone].label}</p>
                             </div>
-                            <span className="font-medium text-slate-700">{style}</span>
                         </div>
-                        ))}
+
+                        {/* Cartela de Cores */}
+                        <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50 relative overflow-hidden">
+                             {/* Fundo Decorativo */}
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-purple-50 to-blue-50 rounded-full blur-3xl opacity-50 -mr-16 -mt-16 pointer-events-none"></div>
+
+                            <div className="relative z-10">
+                                <h3 className="font-bold text-slate-800 text-lg mb-2">Sua Cartela Ideal</h3>
+                                <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-600 mb-4">
+                                    {currentPalette.season}
+                                </h2>
+                                <p className="text-slate-500 text-sm leading-relaxed mb-8 border-l-4 border-purple-200 pl-4">
+                                    {currentPalette.description}
+                                </p>
+
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Paleta Principal</h4>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {currentPalette.colors.map((color, i) => (
+                                        <div key={i} className="group flex flex-col items-center gap-2">
+                                            <div className={`w-16 h-16 rounded-full shadow-md ${color === 'bg-white' ? 'border border-slate-200 bg-white' : color} transform transition duration-500 group-hover:scale-110 group-hover:rotate-6 ring-2 ring-white ring-offset-2 ring-offset-slate-50`}></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
+                    {/* COLUNA DA DIREITA: ESTILOS VISUAIS (EDITORIAL) */}
+                    <div className="w-full lg:w-2/3">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="font-bold text-slate-800 text-xl">
+                                Estilos Recomendados
+                            </h3>
+                            <span className="text-xs font-bold bg-slate-900 text-white px-3 py-1 rounded-full">
+                                {currentPalette.styles.length} Looks
+                            </span>
+                        </div>
+                        
+                        {/* Alteração: grid-cols-2 md:grid-cols-3 e altura h-96 para ficar mais vertical/fashion */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                            {currentPalette.styles.map((style) => (
+                                <div key={style} className="group relative h-96 rounded-[2rem] overflow-hidden cursor-pointer shadow-md hover:shadow-2xl transition-all duration-500 bg-white">
+                                    {/* Imagem de Fundo com Zoom no Hover */}
+                                    <div className="absolute inset-0 bg-slate-200">
+                                        <img 
+                                            // Adicionamos 'as any' ou checagem para evitar erro de TS se faltar chave
+                                            src={styleImagesData[style as keyof typeof styleImagesData] || 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=600&auto=format&fit=crop'} 
+                                            alt={style}
+                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                        />
+                                    </div>
+                                    
+                                    {/* Overlay Escuro Gradiente - Aumentado para legibilidade */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-90 transition-opacity"></div>
+                                    
+                                    {/* Conteúdo do Card */}
+                                    <div className="absolute bottom-0 left-0 w-full p-6 translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+                                        <div className="flex items-center gap-2 text-white/90 text-[10px] font-bold uppercase tracking-wider mb-2">
+                                            <Sparkles size={12} className="text-yellow-400"/>
+                                            Match 98%
+                                        </div>
+                                        <h4 className="text-white font-bold text-2xl leading-none mb-2 shadow-sm">{style}</h4>
+                                        <div className="h-0 group-hover:h-auto overflow-hidden transition-all">
+                                            <p className="text-slate-300 text-xs mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100 font-medium">
+                                                Ver inspirações
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Botão Flutuante */}
+                                    <div className="absolute top-4 right-4 w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 border border-white/30">
+                                        <ArrowRight size={18}/>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
+
                 </div>
             )}
 
@@ -543,7 +697,7 @@ const PersonalStylistApp = () => {
                             <div>
                                 <label className="text-sm font-bold text-slate-700 mb-3 block">Preferência de Ajuste</label>
                                 <div className="grid grid-cols-3 gap-2">
-                                    {['tight', 'regular', 'loose'].map((pref) => (
+                                    {(['tight', 'regular', 'loose'] as const).map((pref) => (
                                         <button key={pref} onClick={() => setFitMetrics({...fitMetrics, preference: pref})} className={`py-2 rounded-lg text-sm font-medium transition ${fitMetrics.preference === pref ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                                             {pref === 'tight' ? 'Justo' : pref === 'regular' ? 'Regular' : 'Largo'}
                                         </button>
@@ -649,7 +803,7 @@ const PersonalStylistApp = () => {
                                 {tryOnState.userImage ? (
                                     <>
                                         {/* CORREÇÃO 1: object-contain para não cortar cabeça */}
-                                        <img src={tryOnState.userImage} className="absolute inset-0 w-full h-full object-contain p-2 opacity-90 group-hover:opacity-100 transition bg-slate-50" />
+                                        <img src={tryOnState.userImage} className="absolute inset-0 w-full h-full object-contain p-2 opacity-90 group-hover:opacity-100 transition bg-slate-50" alt="User Preview" />
                                         <div className="absolute top-3 right-3 bg-white p-1 rounded-full shadow-sm"><Check className="text-green-600" size={16}/></div>
                                         <div className="absolute bottom-3 bg-white/80 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm shadow-sm">Trocar Foto</div>
                                     </>
@@ -667,7 +821,7 @@ const PersonalStylistApp = () => {
                                 {tryOnState.clothImage ? (
                                     <>
                                         {/* CORREÇÃO 1: object-contain para ver roupa inteira */}
-                                        <img src={tryOnState.clothImage} className="absolute inset-0 w-full h-full object-contain p-2 opacity-90 group-hover:opacity-100 transition bg-slate-50" />
+                                        <img src={tryOnState.clothImage} className="absolute inset-0 w-full h-full object-contain p-2 opacity-90 group-hover:opacity-100 transition bg-slate-50" alt="Cloth Preview" />
                                         <div className="absolute top-3 right-3 bg-white p-1 rounded-full shadow-sm"><Check className="text-green-600" size={16}/></div>
                                         <div className="absolute bottom-3 bg-white/80 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-sm shadow-sm">Trocar Roupa</div>
                                     </>
